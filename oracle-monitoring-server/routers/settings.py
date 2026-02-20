@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import os
 import socket
+from core.database import reconnect_db
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -81,4 +82,33 @@ async def test_connection(info: ConnectionInfo):
         return {
             "status": "error", 
             "message": f"Connection Failed: {str(e)}"
+        }
+
+@router.post("/connect")
+async def connect_to_db(info: ConnectionInfo):
+    """Apply Oracle DB Connection globally"""
+    
+    # Construct DSN based on Mode
+    try:
+        if info.mode == "SID":
+            import oracledb as db_driver
+            dsn = db_driver.makedsn(info.host, info.port, sid=info.service_name)
+        else:
+            dsn = f"{info.host}:{info.port}/{info.service_name}"
+            
+        success, message = await reconnect_db(
+            user=info.username,
+            password=info.password,
+            dsn=dsn
+        )
+        
+        if success:
+            return {"status": "success", "message": message}
+        else:
+            return {"status": "error", "message": message}
+            
+    except Exception as e:
+        return {
+            "status": "error", 
+            "message": f"Connection Apply Failed: {str(e)}"
         }

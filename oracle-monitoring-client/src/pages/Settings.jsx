@@ -15,6 +15,9 @@ export default function Settings() {
     const [testStatus, setTestStatus] = useState(null); // null, 'loading', 'success', 'error'
     const [testMessage, setTestMessage] = useState('');
 
+    const [connectStatus, setConnectStatus] = useState(null); // null, 'loading', 'success', 'error'
+    const [connectMessage, setConnectMessage] = useState('');
+
     // Server Connection Test State
     const [serverTestStatus, setServerTestStatus] = useState(null);
     const [serverTestMessage, setServerTestMessage] = useState('');
@@ -59,6 +62,8 @@ export default function Settings() {
     const handleTestConnection = async () => {
         setTestStatus('loading');
         setTestMessage('');
+        setConnectStatus(null);
+        setConnectMessage('');
 
         try {
             const res = await fetch(`${getApiUrl()}/api/settings/test-connection`, {
@@ -78,6 +83,33 @@ export default function Settings() {
         } catch (err) {
             setTestStatus('error');
             setTestMessage('Network Error: Could not reach backend server.');
+        }
+    };
+
+    const handleConnect = async () => {
+        setConnectStatus('loading');
+        setConnectMessage('');
+        setTestStatus(null);
+        setTestMessage('');
+
+        try {
+            const res = await fetch(`${getApiUrl()}/api/settings/connect`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(connInfo)
+            });
+            const data = await res.json();
+
+            if (data.status === 'success') {
+                setConnectStatus('success');
+                setConnectMessage(data.message);
+            } else {
+                setConnectStatus('error');
+                setConnectMessage(data.message);
+            }
+        } catch (err) {
+            setConnectStatus('error');
+            setConnectMessage('Network Error: Could not reach backend server.');
         }
     };
 
@@ -166,14 +198,29 @@ export default function Settings() {
                         </div>
                     )}
 
-                    <div className="mt-4 flex justify-end">
+                    {connectMessage && (
+                        <div className={`mt-4 p-3 rounded-lg text-sm flex items-start gap-2 ${connectStatus === 'success' ? 'bg-primary/10 text-primary border border-primary/20' : 'bg-danger/10 text-danger border border-danger/20'}`}>
+                            {connectStatus === 'success' ? <CheckCircle className="w-4 h-4 mt-0.5" /> : <XCircle className="w-4 h-4 mt-0.5" />}
+                            <span>{connectMessage}</span>
+                        </div>
+                    )}
+
+                    <div className="mt-4 flex justify-end gap-3">
                         <button
                             onClick={handleTestConnection}
-                            disabled={testStatus === 'loading'}
-                            className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-background font-bold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={testStatus === 'loading' || connectStatus === 'loading'}
+                            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {testStatus === 'loading' && <Loader className="w-4 h-4 animate-spin" />}
                             Test Connection
+                        </button>
+                        <button
+                            onClick={handleConnect}
+                            disabled={testStatus === 'loading' || connectStatus === 'loading'}
+                            className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-background font-bold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {connectStatus === 'loading' && <Loader className="w-4 h-4 animate-spin" />}
+                            Save & Connect
                         </button>
                     </div>
                 </Section>

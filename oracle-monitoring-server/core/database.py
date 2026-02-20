@@ -11,7 +11,7 @@ MOCK_MODE = os.getenv("MOCK_MODE", "true").lower() == "true"
 pool = None
 
 async def init_db():
-    """Initialize DB connection pool (or Mock setup)"""
+    "Initialize DB connection pool (or Mock setup)"
     global pool, MOCK_MODE
     if MOCK_MODE:
         print("⚡ Running in MOCK MODE (No real DB connection)")
@@ -33,6 +33,44 @@ async def init_db():
         print(f"❌ DB Connection Failed: {e}")
         print("⚠️ Falling back to MOCK MODE due to connection failure")
         MOCK_MODE = True
+
+async def reconnect_db(user, password, dsn):
+    """Re-establish DB connection pool dynamically from Settings"""
+    global pool, MOCK_MODE, DB_USER, DB_PASSWORD, DB_DSN
+    
+    try:
+        import oracledb
+        
+        # Close existing pool
+        if pool:
+            try:
+                pool.close(force=True)
+            except Exception as e:
+                print(f"⚠️ Error closing old pool: {e}")
+                
+        # Create new pool
+        new_pool = oracledb.create_pool(
+            user=user,
+            password=password,
+            dsn=dsn,
+            min=2,
+            max=5,
+            increment=1
+        )
+        
+        # Update globals only on success
+        pool = new_pool
+        DB_USER = user
+        DB_PASSWORD = password
+        DB_DSN = dsn
+        MOCK_MODE = False
+        
+        print(f"✅ Dynamically connected to Oracle DB: {DB_DSN}")
+        return True, f"Successfully connected to {DB_DSN}"
+        
+    except Exception as e:
+        print(f"❌ Dynamic DB Connection Failed: {e}")
+        return False, str(e)
 
 async def get_db_metrics() -> Dict[str, Any]:
     """Fetch system metrics from DB or Generate Mock Data"""
