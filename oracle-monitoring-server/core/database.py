@@ -19,6 +19,10 @@ async def init_db():
     
     try:
         import oracledb
+        try:
+            oracledb.init_oracle_client()
+        except Exception:
+            pass
         # Initialize Oracle Client (Thin mode default, Thick mode if lib dir set)
         pool = oracledb.create_pool(
             user=DB_USER,

@@ -2,6 +2,10 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import oracledb
+try:
+    oracledb.init_oracle_client()
+except Exception:
+    pass
 import os
 import datetime
 

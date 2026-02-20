@@ -49,6 +49,10 @@ async def test_connection(info: ConnectionInfo):
         # Try importing driver
         try:
             import oracledb as db_driver
+            try:
+                db_driver.init_oracle_client()
+            except Exception:
+                pass
         except ImportError:
             try:
                 import cx_Oracle as db_driver

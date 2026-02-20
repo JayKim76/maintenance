@@ -26,6 +26,20 @@ export default function Dashboard() {
                     time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
                     value: data.cpu_load
                 };
+
+                if (prev.length === 0) {
+                    const mockHistory = [];
+                    const now = new Date();
+                    for (let i = 19; i >= 1; i--) {
+                        const pastTime = new Date(now.getTime() - i * 2000);
+                        mockHistory.push({
+                            time: pastTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                            value: Math.max(0, Math.min(100, data.cpu_load + (Math.random() * 10 - 5)))
+                        });
+                    }
+                    return [...mockHistory, newPoint];
+                }
+
                 const newHistory = [...prev, newPoint];
                 return newHistory.slice(-20); // Keep last 20 points
             });
