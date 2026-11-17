@@ -1,13 +1,23 @@
+import os
+import datetime
 import uvicorn
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import oracledb
-try:
-    oracledb.init_oracle_client()
-except Exception:
-    pass
-import os
-import datetime
+
+load_dotenv()
+
+# Thick mode initialization
+client_dir = os.getenv("ORACLE_CLIENT_DIR") or None
+thick_env = os.getenv("ORACLE_THICK_MODE", "true").lower()
+if thick_env == "true" or client_dir:
+    try:
+        oracledb.init_oracle_client(lib_dir=client_dir)
+        print(f"[OK] Thick mode initialized for agent (lib_dir={client_dir})")
+    except Exception as ex:
+        if "already been initialized" not in str(ex):
+            print(f"[WARN] Agent failed to init thick mode: {ex}")
 
 # --- Configuration ---
 # DB Connection Info (Load from Env or Default)

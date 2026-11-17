@@ -1,9 +1,39 @@
-import { LayoutDashboard, Database, AlertCircle, Settings, Menu, Terminal, Search, Bell, User } from 'lucide-react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useAuth, Role } from '../hooks/useAuth';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useConnection } from '../context/ConnectionContext';
+import { Plug, LayoutDashboard, Database, Terminal, AlertCircle, Activity, Settings, User, Power } from 'lucide-react';
+import { getApiUrl } from '../utils/api';
 
 export default function Layout({ children }) {
     const navigate = useNavigate();
     const location = useLocation();
+    const { connected, dsn, user, disconnect } = useConnection();
+    const { role, setRole } = useAuth();
+    const [alertCount, setAlertCount] = useState(null);
+
+    useEffect(() => {
+        let cancelled = false;
+        const fetchAlertCount = async () => {
+            try {
+                const res = await fetch(`${getApiUrl()}/api/alerts/history`, {
+                    headers: { 'X-Role': role }
+                });
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!cancelled) setAlertCount(Array.isArray(data) ? data.length : 0);
+            } catch {
+                // 연결 안 된 상태에서는 뱃지 숨김
+            }
+        };
+        fetchAlertCount();
+        const interval = setInterval(fetchAlertCount, 30000);
+        return () => { cancelled = true; clearInterval(interval); };
+    }, [role, connected]);
+
+    const handleDisconnect = async () => {
+        await disconnect();
+    };
 
     const isActive = (path) => location.pathname === path;
 
@@ -17,6 +47,12 @@ export default function Layout({ children }) {
                 </div>
 
                 <nav className="flex-1 mt-6 px-3 space-y-1">
+                    <NavItem
+                        icon={<Plug size={20} />}
+                        label="Connections"
+                        active={isActive('/connections')}
+                        onClick={() => navigate('/connections')}
+                    />
                     <NavItem
                         icon={<LayoutDashboard size={20} />}
                         label="Dashboard"
@@ -39,8 +75,14 @@ export default function Layout({ children }) {
                         icon={<AlertCircle size={20} />}
                         label="Alerts"
                         active={isActive('/alerts')}
-                        badge="3"
+                        badge={alertCount > 0 ? String(alertCount > 99 ? '99+' : alertCount) : null}
                         onClick={() => navigate('/alerts')}
+                    />
+                    <NavItem
+                        icon={<Activity size={20} />}
+                        label="Health Check"
+                        active={isActive('/healthcheck')}
+                        onClick={() => navigate('/healthcheck')}
                     />
                     <NavItem
                         icon={<Settings size={20} />}
@@ -51,7 +93,19 @@ export default function Layout({ children }) {
                 </nav>
 
                 <div className="p-4 border-t border-slate-700">
-                    <NavItem icon={<User size={20} />} label="Admin" />
+                    <div className="flex flex-col gap-2">
+                        <span className="text-[10px] uppercase font-bold text-slate-500 px-3">Active Role</span>
+                        <select 
+                            value={role} 
+                            onChange={(e) => setRole(e.target.value)}
+                            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-gray-300 outline-none focus:ring-1 focus:ring-primary/50 cursor-pointer w-full"
+                        >
+                            <option value={Role.ADMIN}>ADMIN (Full)</option>
+                            <option value={Role.DBA}>DBA (SQL Execution)</option>
+                            <option value={Role.OPERATOR}>OPERATOR (Read Only)</option>
+                            <option value={Role.VIEWER}>VIEWER (No SQL)</option>
+                        </select>
+                    </div>
                 </div>
             </aside>
 
@@ -65,23 +119,35 @@ export default function Layout({ children }) {
                             {location.pathname === '/performance' && 'The Lab'}
                             {location.pathname === '/alerts' && 'Alert History'}
                             {location.pathname === '/settings' && 'Configuration'}
+                            {location.pathname === '/connections' && 'Database Connection'}
+                            {location.pathname === '/healthcheck' && 'DB Health Check'}
                         </h2>
                     </div>
 
                     <div className="flex items-center gap-4">
-                        <div className="relative hidden md:block group">
-                            <Search className="absolute left-3 top-2.5 text-slate-500 w-4 h-4 group-focus-within:text-primary transition-colors" />
-                            <input
-                                type="text"
-                                placeholder="Search instance..."
-                                className="bg-slate-800/50 border border-slate-700 rounded-full pl-10 pr-4 py-1.5 text-sm focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 w-64 transition-all"
-                            />
+                        <div className="flex items-center gap-2 mr-4">
+                            <User className="w-4 h-4 text-primary" />
+                            <span className="text-xs font-semibold text-primary px-2 py-0.5 rounded bg-primary/10 border border-primary/20">
+                                {role}
+                            </span>
                         </div>
                         <div className="h-6 w-px bg-slate-700 mx-2"></div>
-                        <span className="px-3 py-1 rounded-full bg-secondary/10 text-secondary text-xs font-medium border border-secondary/20 flex items-center gap-2 shadow-sm shadow-secondary/5">
-                            <span className="w-2 h-2 rounded-full bg-secondary animate-pulse shadow-[0_0_8px_rgba(132,204,22,0.6)]"></span>
-                            RUNNING
-                        </span>
+                        {connected ? (
+                            <div className="flex items-center gap-2">
+                                <span className="px-3 py-1 rounded-full bg-secondary/10 text-secondary text-xs font-medium border border-secondary/20 flex items-center gap-2 shadow-sm shadow-secondary/5">
+                                    <span className="w-2 h-2 rounded-full bg-secondary animate-pulse shadow-[0_0_8px_rgba(132,204,22,0.6)]"></span>
+                                    {user}@{dsn}
+                                </span>
+                                <button onClick={handleDisconnect} title="Disconnect" className="p-1.5 rounded-lg bg-slate-800 hover:bg-danger/20 hover:text-danger text-slate-400 transition-colors">
+                                    <Power className="w-4 h-4" />
+                                </button>
+                            </div>
+                        ) : (
+                            <span onClick={() => navigate('/connections')} className="px-3 py-1 rounded-full bg-slate-800 text-slate-400 text-xs font-medium border border-slate-700 flex items-center gap-2 cursor-pointer hover:border-primary/50 hover:text-primary transition-colors">
+                                <span className="w-2 h-2 rounded-full bg-slate-500"></span>
+                                NOT CONNECTED
+                            </span>
+                        )}
                     </div>
                 </header>
 

@@ -1,6 +1,29 @@
-node_modules
-.DS_Store
-dist
-.env
-__pycache__
+# Dependencies & Environments
+node_modules/
+venv/
+.venv/
+
+# Build outputs & caches
+dist/
+build/
+frontend_dist/
 *.pyc
+__pycache__/
+.pytest_cache/
+
+# OS & Editor
+.DS_Store
+.vscode/
+.idea/
+
+# Environment & Sensitive configs (DB connection info & credentials)
+.env
+*.env
+connections.json
+saved_connections.json
+previous_healthcheck.json
+
+# Local agent caches
+.agent/
+.claude/
+

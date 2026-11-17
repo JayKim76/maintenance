@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Oracle DB 점검 리포트 | oracle-monitoring-server</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg:        #0b0e1a;
+      --card:      #111827;
+      --card2:     #161d2e;
+      --border:    #1e2d45;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --accent:    #3b82f6;
+      --accent2:   #6366f1;
+      --green:     #22c55e;
+      --yellow:    #f59e0b;
+      --red:       #ef4444;
+      --orange:    #f97316;
+      --cyan:      #06b6d4;
+      --purple:    #a855f7;
+      --mono:      'JetBrains Mono', monospace;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ─── Background decoration ─── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background:
+        radial-gradient(ellipse 80% 50% at 10% 10%, rgba(59,130,246,.07) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 40% at 90% 80%, rgba(99,102,241,.06) 0%, transparent 60%);
+      pointer-events: none; z-index: 0;
+    }
+
+    /* ─── Header ─── */
+    header {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(11,14,26,.85);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 32px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .header-logo {
+      display: flex; align-items: center; gap: 12px;
+    }
+    .header-logo .logo-icon {
+      width: 36px; height: 36px; border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    .header-logo h1 { font-size: 16px; font-weight: 700; letter-spacing: -.3px; }
+    .header-logo span { font-size: 12px; color: var(--muted); font-weight: 400; }
+    .header-meta {
+      display: flex; align-items: center; gap: 16px;
+    }
+    .badge {
+      padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600;
+      letter-spacing: .4px; text-transform: uppercase;
+    }
+    .badge-green  { background: rgba(34,197,94,.15);  color: var(--green);  border: 1px solid rgba(34,197,94,.3);  }
+    .badge-red    { background: rgba(239,68,68,.15);   color: var(--red);    border: 1px solid rgba(239,68,68,.3);   }
+    .badge-yellow { background: rgba(245,158,11,.15);  color: var(--yellow); border: 1px solid rgba(245,158,11,.3);  }
+    .badge-blue   { background: rgba(59,130,246,.15);  color: var(--accent); border: 1px solid rgba(59,130,246,.3);  }
+    .badge-orange { background: rgba(249,115,22,.15);  color: var(--orange); border: 1px solid rgba(249,115,22,.3);  }
+    .ts { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+
+    /* ─── Main layout ─── */
+    main { position: relative; z-index: 1; padding: 28px 32px 60px; max-width: 1440px; margin: 0 auto; }
+
+    /* ─── Section title ─── */
+    .section-title {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 13px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 1px;
+      margin: 36px 0 14px;
+    }
+    .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+    /* ─── KPI grid ─── */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 14px;
+    }
+    .kpi-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 20px;
+      position: relative; overflow: hidden;
+      transition: transform .2s, box-shadow .2s;
+    }
+    .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+    .kpi-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: var(--line-color, var(--accent));
+      border-radius: 12px 12px 0 0;
+    }
+    .kpi-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 6px; }
+    .kpi-value { font-size: 26px; font-weight: 700; font-family: var(--mono); color: var(--kv-color, var(--text)); }
+    .kpi-sub   { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+    /* ─── Issue alert box ─── */
+    .issue-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+    .issue-card {
+      border-radius: 10px; padding: 14px 16px;
+      display: flex; gap: 12px; align-items: flex-start;
+      border: 1px solid;
+    }
+    .issue-card.critical { background: rgba(239,68,68,.08);  border-color: rgba(239,68,68,.25); }
+    .issue-card.warning  { background: rgba(245,158,11,.08); border-color: rgba(245,158,11,.25); }
+    .issue-card.info     { background: rgba(59,130,246,.08); border-color: rgba(59,130,246,.25); }
+    .issue-card.ok       { background: rgba(34,197,94,.08);  border-color: rgba(34,197,94,.25);  }
+    .issue-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+    .issue-title { font-weight: 600; font-size: 13px; margin-bottom: 3px; }
+    .issue-desc  { font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+    /* ─── Table ─── */
+    .table-wrap {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 14px;
+    }
+    .table-header {
+      padding: 14px 18px 10px;
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    .table-title { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .table-count { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+    .tbl { width: 100%; border-collapse: collapse; }
+    .tbl th {
+      text-align: left; font-size: 10px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .5px;
+      padding: 8px 12px; background: var(--card2);
+      border-bottom: 1px solid var(--border);
+    }
+    .tbl td {
+      padding: 8px 12px; font-size: 12px;
+      border-bottom: 1px solid rgba(30,45,69,.5);
+      font-family: var(--mono);
+    }
+    .tbl tbody tr:last-child td { border-bottom: none; }
+    .tbl tbody tr:hover td { background: rgba(255,255,255,.025); }
+    .tbl td.num { text-align: right; }
+    .pct-bar-wrap { display: flex; align-items: center; gap: 8px; }
+    .pct-bar { flex: 1; height: 5px; background: var(--border); border-radius: 99px; overflow: hidden; min-width: 60px; }
+    .pct-bar-fill { height: 100%; border-radius: 99px; transition: width .4s; }
+    .pct-num { font-size: 11px; font-family: var(--mono); min-width: 38px; text-align: right; }
+
+    /* ─── Two-column layout ─── */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+
+    /* ─── Code chip ─── */
+    .chip {
+      display: inline-block; background: rgba(255,255,255,.06);
+      border: 1px solid var(--border); border-radius: 4px;
+      padding: 1px 6px; font-family: var(--mono); font-size: 11px;
+    }
+
+    /* ─── Endpoint grid ─── */
+    .endpoint-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+    .ep-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+      padding: 12px 14px; display: flex; align-items: center; gap: 10px;
+    }
+    .ep-status { font-size: 16px; flex-shrink: 0; }
+    .ep-info { flex: 1; min-width: 0; }
+    .ep-name { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ep-url  { font-size: 10px; color: var(--muted); font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ep-badge { flex-shrink: 0; }
+
+    /* ─── Footer ─── */
+    footer {
+      text-align: center; color: var(--muted); font-size: 11px;
+      padding: 20px 0; border-top: 1px solid var(--border);
+      margin-top: 40px;
+    }
+
+    /* Animated pulse */
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .live-dot {
+      display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+      background: var(--green); animation: pulse 1.8s infinite;
+      margin-right: 6px; vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════ HEADER ══════════════════════════════ -->
+<header>
+  <div class="header-logo">
+    <div class="logo-icon">🔍</div>
+    <div>
+      <h1>Oracle DB 점검 리포트</h1>
+      <span>oracle-monitoring-server &nbsp;·&nbsp; FastAPI 0.129 &nbsp;·&nbsp; Python 3.11.2</span>
+    </div>
+  </div>
+  <div class="header-meta">
+    <span class="ts">📅 2026-06-08 &nbsp;15:04:45</span>
+    <span class="badge badge-red">⚠ 위험</span>
+    <span style="font-size:12px;color:var(--muted);"><span class="live-dot"></span>실시간 수집</span>
+  </div>
+</header>
+
+<!-- ══════════════════════════════ MAIN ══════════════════════════════ -->
+<main>
+
+  <!-- ── 1. 종합 이슈 요약 ── -->
+  <div class="section-title">🚨 종합 진단 결과</div>
+  <div class="issue-grid">
+    <div class="issue-card critical">
+      <div class="issue-icon">🔴</div>
+      <div>
+        <div class="issue-title">SYSTEM 테이블스페이스 97.03% 사용</div>
+        <div class="issue-desc">850 MB 중 824.75 MB 사용 — 즉시 용량 확보 필요. 미조치 시 DB 장애 발생 가능.</div>
+      </div>
+    </div>
+    <div class="issue-card critical">
+      <div class="issue-icon">🔴</div>
+      <div>
+        <div class="issue-title">MOMS_DATA 95.19% / SYSAUX 94.08% / USERS 93.96%</div>
+        <div class="issue-desc">주요 데이터파일 3곳이 위험 수준(95% 이상). 자동확장 설정되어 있으나 한도 임박.</div>
+      </div>
+    </div>
+    <div class="issue-card critical">
+      <div class="issue-icon">🔴</div>
+      <div>
+        <div class="issue-title">NOARCHIVELOG 모드 운영 중</div>
+        <div class="issue-desc">아카이브 로그가 비활성화되어 있어 장애 발생 시 데이터 복구 불가능.</div>
+      </div>
+    </div>
+    <div class="issue-card critical">
+      <div class="issue-icon">🔴</div>
+      <div>
+        <div class="issue-title">TEMP 테이블스페이스 100% 사용 (64 GB)</div>
+        <div class="issue-desc">TEMP 65,534 MB / 여유 0 MB — 대용량 정렬·조인 쿼리 실패 위험.</div>
+      </div>
+    </div>
+    <div class="issue-card warning">
+      <div class="issue-icon">🟡</div>
+      <div>
+        <div class="issue-title">resmgr:cpu quantum 누적 대기 149,530,623 초</div>
+        <div class="issue-desc">Resource Manager CPU 쿼텀 경합이 극심. 세션 187M회 대기 — Resource Plan 검토 필요.</div>
+      </div>
+    </div>
+    <div class="issue-card warning">
+      <div class="issue-icon">🟡</div>
+      <div>
+        <div class="issue-title">cursor: mutex X 42,156,753 초 대기</div>
+        <div class="issue-desc">커서 Mutex 경합 — 공유 SQL 파싱 부하 과다. 바인드 변수 및 cursor_sharing 파라미터 검토.</div>
+      </div>
+    </div>
+    <div class="issue-card warning">
+      <div class="issue-icon">🟡</div>
+      <div>
+        <div class="issue-title">MSC_APP_COUPON_PRODUCT UPDATE 다중 플랜 존재</div>
+        <div class="issue-desc">sql_id <span class="chip">9asn975gzs2uz</span> 가 7개 child cursor로 분리 실행 — Cardinality 피드백/바인드 피킹 문제.</div>
+      </div>
+    </div>
+    <div class="issue-card warning">
+      <div class="issue-icon">🟡</div>
+      <div>
+        <div class="issue-title">@app.on_event Deprecation (FastAPI)</div>
+        <div class="issue-desc">main.py L26 — FastAPI 0.129에서 deprecated. lifespan 핸들러로 교체 권장.</div>
+      </div>
+    </div>
+    <div class="issue-card info">
+      <div class="issue-icon">🔵</div>
+      <div>
+        <div class="issue-title">ORA-00904: TIME_WAITED_MICRO 컬럼 오류</div>
+        <div class="issue-desc">dashboard.py Wait Events 쿼리 — 대시보드 wait_events가 빈 배열로 반환됨. 쿼리 수정 필요.</div>
+      </div>
+    </div>
+    <div class="issue-card ok">
+      <div class="issue-icon">🟢</div>
+      <div>
+        <div class="issue-title">Blocking Lock 없음 — 세션 정상</div>
+        <div class="issue-desc">MOMSTOUCH / DATADOG 등 94개 사용자 세션 보유, 블로킹 Lock 미감지.</div>
+      </div>
+    </div>
+    <div class="issue-card ok">
+      <div class="issue-icon">🟢</div>
+      <div>
+        <div class="issue-title">모든 데이터파일 자동확장(AUTOEXTEND) 활성화</div>
+        <div class="issue-desc">11개 데이터파일 모두 YES — 단기 용량 부족 자동 대응 가능.</div>
+      </div>
+    </div>
+    <div class="issue-card ok">
+      <div class="issue-icon">🟢</div>
+      <div>
+        <div class="issue-title">API 서버 9/9 엔드포인트 정상 응답</div>
+        <div class="issue-desc">FastAPI / Uvicorn — 모든 엔드포인트 200 OK. Oracle Thick Mode (IC 19.30) 정상 로드.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2. KPI 카드 ── -->
+  <div class="section-title">📊 핵심 지표</div>
+  <div class="kpi-grid">
+    <div class="kpi-card" style="--line-color:var(--green)">
+      <div class="kpi-label">DB 인스턴스</div>
+      <div class="kpi-value" style="--kv-color:var(--green);font-size:18px;">ORA11</div>
+      <div class="kpi-sub">Oracle 19c · Linux x86 64-bit</div>
+    </div>
+    <div class="kpi-card" style="--line-color:var(--accent)">
+      <div class="kpi-label">사용자 세션</div>
+      <div class="kpi-value" style="--kv-color:var(--accent);">94</div>
+      <div class="kpi-sub">활성 1 / 프로세스 266</div>
+    </div>
+    <div class="kpi-card" style="--line-color:var(--cyan)">
+      <div class="kpi-label">SGA / PGA</div>
+      <div class="kpi-value" style="--kv-color:var(--cyan);font-size:20px;">20 GB</div>
+      <div class="kpi-sub">PGA 사용 578.5 MB / 할당 758.3 MB</div>
+    </div>
+    <div class="kpi-card" style="--line-color:var(--red)">
+      <div class="kpi-label">SYSTEM TS 사용률</div>
+      <div class="kpi-value" style="--kv-color:var(--red);">97%</div>
+      <div class="kpi-sub">824.75 / 850 MB — 위험</div>
+    </div>
+    <div class="kpi-card" style="--line-color:var(--red)">
+      <div class="kpi-label">TEMP 사용률</div>
+      <div class="kpi-value" style="--kv-color:var(--red);">100%</div>
+      <div class="kpi-sub">65,534 MB / 여유 0 MB</div>
+    </div>
+    <div class="kpi-card" style="--line-color:var(--orange)">
+      <div class="kpi-label">Top Wait (누적)</div>
+      <div class="kpi-value" style="--kv-color:var(--orange);font-size:16px;">149M s</div>
+      <div class="kpi-sub">resmgr:cpu quantum</div>
+    </div>
+    <div class="kpi-card" style="--line-color:var(--purple)">
+      <div class="kpi-label">DB 기동 시각</div>
+      <div class="kpi-value" style="--kv-color:var(--purple);font-size:14px;">2025-11-27</div>
+      <div class="kpi-sub">05:24:33 (호스트: momsdbnew)</div>
+    </div>
+    <div class="kpi-card" style="--line-color:var(--green)">
+      <div class="kpi-label">서버 엔드포인트</div>
+      <div class="kpi-value" style="--kv-color:var(--green);">9/9</div>
+      <div class="kpi-sub">모두 정상 200 OK</div>
+    </div>
+  </div>
+
+  <!-- ── 3. 테이블스페이스 ── -->
+  <div class="section-title">💾 테이블스페이스 사용 현황</div>
+  <div class="table-wrap">
+    <div class="table-header">
+      <div class="table-title">📁 Tablespace Usage</div>
+      <div class="table-count">10개 테이블스페이스</div>
+    </div>
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th>TABLESPACE</th>
+          <th class="num">TOTAL (MB)</th>
+          <th class="num">USED (MB)</th>
+          <th class="num">FREE (MB)</th>
+          <th style="min-width:180px;">사용률</th>
+          <th>상태</th>
+        </tr>
+      </thead>
+      <tbody id="ts-tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- ── 4. Top Wait Events + Top SQL (2col) ── -->
+  <div class="two-col">
+    <!-- Top Wait Events -->
+    <div>
+      <div class="section-title">⏱ Top Wait Events</div>
+      <div class="table-wrap">
+        <div class="table-header">
+          <div class="table-title">🕐 Wait Events (Non-Idle)</div>
+          <div class="table-count">Top 10</div>
+        </div>
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>이벤트</th>
+              <th>분류</th>
+              <th class="num">대기시간(s)</th>
+            </tr>
+          </thead>
+          <tbody id="wait-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Top SQL -->
+    <div>
+      <div class="section-title">🔥 Top SQL (Elapsed Time)</div>
+      <div class="table-wrap">
+        <div class="table-header">
+          <div class="table-title">📋 v$sql — 누적 경과시간 기준</div>
+          <div class="table-count">Top 10</div>
+        </div>
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>SQL_ID</th>
+              <th class="num">경과(s)</th>
+              <th class="num">실행</th>
+              <th>SQL 미리보기</th>
+            </tr>
+          </thead>
+          <tbody id="sql-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 5. 용량 (SGA/PGA/세션) ── -->
+  <div class="section-title">🧠 Capacity — SGA / PGA / Sessions</div>
+  <div class="two-col">
+    <div class="table-wrap">
+      <div class="table-header">
+        <div class="table-title">⚙️ v$parameter — 주요 메모리 파라미터</div>
+      </div>
+      <table class="tbl">
+        <thead><tr><th>파라미터</th><th class="num">값 (bytes)</th><th class="num">GB</th></tr></thead>
+        <tbody>
+          <tr><td>pga_aggregate_limit</td><td class="num">107,374,182,400</td><td class="num" style="color:var(--cyan)">100 GB</td></tr>
+          <tr><td>pga_aggregate_target</td><td class="num">21,474,836,480</td><td class="num" style="color:var(--cyan)">20 GB</td></tr>
+          <tr><td>sga_max_size</td><td class="num">21,474,836,480</td><td class="num" style="color:var(--cyan)">20 GB</td></tr>
+          <tr><td>sga_target</td><td class="num">21,474,836,480</td><td class="num" style="color:var(--cyan)">20 GB</td></tr>
+          <tr><td>processes</td><td class="num">5,120</td><td class="num" style="color:var(--muted)">—</td></tr>
+          <tr><td>sessions</td><td class="num">7,744</td><td class="num" style="color:var(--muted)">—</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="table-wrap">
+      <div class="table-header">
+        <div class="table-title">💡 v$pgastat — PGA 현황</div>
+      </div>
+      <table class="tbl">
+        <thead><tr><th>지표</th><th class="num">MB</th></tr></thead>
+        <tbody>
+          <tr><td>total PGA inuse</td><td class="num" style="color:var(--green)">578.5</td></tr>
+          <tr><td>total PGA allocated</td><td class="num" style="color:var(--accent)">758.3</td></tr>
+          <tr><td>maximum PGA allocated (peak)</td><td class="num" style="color:var(--orange)">118,619.6</td></tr>
+          <tr><td>total freeable PGA memory</td><td class="num" style="color:var(--muted)">99.6</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── 6. Hot Files (I/O) ── -->
+  <div class="section-title">🔥 Hot Files — I/O 부하 상위 파일</div>
+  <div class="table-wrap">
+    <div class="table-header">
+      <div class="table-title">📂 v$filestat — Read + Write Time 기준</div>
+      <div class="table-count">상위 6개 파일</div>
+    </div>
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th>파일 경로</th>
+          <th class="num">물리읽기</th>
+          <th class="num">물리쓰기</th>
+          <th class="num">읽기(s)</th>
+          <th class="num">쓰기(s)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="chip">/data/ORA11/users01.dbf</span></td>
+          <td class="num">65,869,116</td><td class="num">31,662,825</td>
+          <td class="num" style="color:var(--yellow)">1,659.78</td><td class="num" style="color:var(--red)">12,325.74</td>
+        </tr>
+        <tr>
+          <td><span class="chip">/oracle/.../MOMS_DATA</span></td>
+          <td class="num">235,440,658</td><td class="num">26,924,955</td>
+          <td class="num" style="color:var(--red)">11,046.78</td><td class="num" style="color:var(--yellow)">2,575.74</td>
+        </tr>
+        <tr>
+          <td><span class="chip">/data/ORA11/MOMS_DATA02.dbf</span></td>
+          <td class="num">37,632,524</td><td class="num">6,950,514</td>
+          <td class="num" style="color:var(--yellow)">1,737.38</td><td class="num" style="color:var(--yellow)">2,476.37</td>
+        </tr>
+        <tr>
+          <td><span class="chip">/data/ORA11/undotbs01.dbf</span></td>
+          <td class="num">59,271</td><td class="num">2,803,506</td>
+          <td class="num">1.66</td><td class="num" style="color:var(--orange)">1,274.14</td>
+        </tr>
+        <tr>
+          <td><span class="chip">/data/ORA11/sysaux01.dbf</span></td>
+          <td class="num">6,430,279</td><td class="num">1,414,939</td>
+          <td class="num">82.33</td><td class="num" style="color:var(--yellow)">449.53</td>
+        </tr>
+        <tr>
+          <td><span class="chip">/data/ORA11/system01.dbf</span></td>
+          <td class="num">5,713,221</td><td class="num">1,338,537</td>
+          <td class="num">39.60</td><td class="num">427.67</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── 7. 인스턴스 정보 ── -->
+  <div class="section-title">🖥 인스턴스 / DB 기본 정보</div>
+  <div class="two-col">
+    <div class="table-wrap">
+      <div class="table-header"><div class="table-title">🗄 v$database</div></div>
+      <table class="tbl">
+        <thead><tr><th>항목</th><th>값</th></tr></thead>
+        <tbody>
+          <tr><td>DB 이름</td><td><span class="chip">ORA11</span></td></tr>
+          <tr><td>OPEN_MODE</td><td><span style="color:var(--green)">READ WRITE</span></td></tr>
+          <tr><td>DATABASE_ROLE</td><td><span style="color:var(--cyan)">PRIMARY</span></td></tr>
+          <tr><td>LOG_MODE</td><td><span style="color:var(--red)">⚠ NOARCHIVELOG</span></td></tr>
+          <tr><td>PLATFORM</td><td>Linux x86 64-bit</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="table-wrap">
+      <div class="table-header"><div class="table-title">⚡ v$instance</div></div>
+      <table class="tbl">
+        <thead><tr><th>항목</th><th>값</th></tr></thead>
+        <tbody>
+          <tr><td>INSTANCE_NAME</td><td><span class="chip">ora11</span></td></tr>
+          <tr><td>HOST_NAME</td><td><span class="chip">momsdbnew</span></td></tr>
+          <tr><td>VERSION</td><td><span style="color:var(--accent)">19.0.0.0.0</span></td></tr>
+          <tr><td>STATUS</td><td><span style="color:var(--green)">OPEN</span></td></tr>
+          <tr><td>기동 시각</td><td>2025-11-27 05:24:33</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── 8. API 엔드포인트 점검 결과 ── -->
+  <div class="section-title">🔌 API 엔드포인트 점검 결과</div>
+  <div class="endpoint-grid">
+    <div class="ep-card"><div class="ep-status">✅</div><div class="ep-info"><div class="ep-name">서버 상태</div><div class="ep-url">GET /api/status</div></div><span class="badge badge-green ep-badge">200</span></div>
+    <div class="ep-card"><div class="ep-status">✅</div><div class="ep-info"><div class="ep-name">서버 헬스체크</div><div class="ep-url">GET /api/health</div></div><span class="badge badge-green ep-badge">200</span></div>
+    <div class="ep-card"><div class="ep-status">✅</div><div class="ep-info"><div class="ep-name">대시보드 메트릭</div><div class="ep-url">GET /api/dashboard/metrics</div></div><span class="badge badge-green ep-badge">200</span></div>
+    <div class="ep-card"><div class="ep-status">✅</div><div class="ep-info"><div class="ep-name">ASH 성능 데이터</div><div class="ep-url">GET /api/performance/ash</div></div><span class="badge badge-green ep-badge">200</span></div>
+    <div class="ep-card"><div class="ep-status">✅</div><div class="ep-info"><div class="ep-name">Top SQL</div><div class="ep-url">GET /api/performance/top-sql</div></div><span class="badge badge-green ep-badge">200</span></div>
+    <div class="ep-card"><div class="ep-status">✅</div><div class="ep-info"><div class="ep-name">알림 이력</div><div class="ep-url">GET /api/alerts/history</div></div><span class="badge badge-green ep-badge">200</span></div>
+    <div class="ep-card"><div class="ep-status">✅</div><div class="ep-info"><div class="ep-name">DB 연결 상태</div><div class="ep-url">GET /api/settings/status</div></div><span class="badge badge-green ep-badge">200</span></div>
+    <div class="ep-card"><div class="ep-status">✅</div><div class="ep-info"><div class="ep-name">저장된 연결 목록</div><div class="ep-url">GET /api/settings/saved-connections</div></div><span class="badge badge-green ep-badge">200</span></div>
+    <div class="ep-card"><div class="ep-status">✅</div><div class="ep-info"><div class="ep-name">종합 헬스체크 실행</div><div class="ep-url">GET /api/healthcheck/run</div></div><span class="badge badge-green ep-badge">200</span></div>
+  </div>
+
+  <!-- ── 9. 코드 이슈 ── -->
+  <div class="section-title">🛠 코드 수정 권고사항</div>
+  <div class="issue-grid">
+    <div class="issue-card warning">
+      <div class="issue-icon">⚙️</div>
+      <div>
+        <div class="issue-title">[main.py] @app.on_event deprecated</div>
+        <div class="issue-desc">FastAPI 0.93+ 에서 on_event 대신 <span class="chip">@asynccontextmanager</span> lifespan 방식 사용 권장.</div>
+      </div>
+    </div>
+    <div class="issue-card warning">
+      <div class="issue-icon">💡</div>
+      <div>
+        <div class="issue-title">[database.py] Wait Events 쿼리 오류</div>
+        <div class="issue-desc"><span class="chip">TIME_WAITED_MICRO</span> → <span class="chip">TIME_WAITED</span> 로 변경 필요 (Oracle 11g 호환).</div>
+      </div>
+    </div>
+    <div class="issue-card info">
+      <div class="issue-icon">🔒</div>
+      <div>
+        <div class="issue-title">[alerts.py] x$dbgalertext 접근 권한</div>
+        <div class="issue-desc">SYSDBA 권한 미보유 시 v$diag_alert_ext 대체 쿼리 사용 권장.</div>
+      </div>
+    </div>
+    <div class="issue-card info">
+      <div class="issue-icon">🔗</div>
+      <div>
+        <div class="issue-title">[alerts.py] blocking session JOIN 중복 컬럼</div>
+        <div class="issue-desc">ORA-00918 — v$session JOIN에서 컬럼명 alias 추가로 해결 가능.</div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  Oracle DB Inspection Report &nbsp;·&nbsp; oracle-monitoring-server &nbsp;·&nbsp;
+  Generated 2026-06-08 15:04:48 KST &nbsp;·&nbsp;
+  Connected: system@103.219.125.110:1521/ora11
+</footer>
+
+<!-- ══════════════════════════════ SCRIPT ══════════════════════════════ -->
+<script>
+/* ── Tablespace table ── */
+const tsData = [
+  ["SYSTEM",        850,      824.75,  25.25,  97.03],
+  ["MOMS_DATA",     44967.98, 42806.86,2161.13,95.19],
+  ["SYSAUX",        1590,     1495.88, 94.13,  94.08],
+  ["USERS",         31260,    29371.69,1888.31, 93.96],
+  ["MOMS_IDX",      4096,     418.75,  3677.25, 10.22],
+  ["MOMS_TR_BACKUP",4096,     283.25,  3812.75, 6.92],
+  ["MOMS_TR",       4096,     244.38,  3851.63, 5.97],
+  ["UNDOTBS1",      22225,    85.38,   22139.63,0.38],
+  ["MOMSTEST",      4096,     1,       4095,    0.02],
+  ["MOMSMALL",      4096,     1,       4095,    0.02],
+];
+
+function pctColor(pct) {
+  if (pct >= 95) return 'var(--red)';
+  if (pct >= 85) return 'var(--yellow)';
+  if (pct >= 70) return 'var(--orange)';
+  return 'var(--green)';
+}
+function pctBadge(pct) {
+  if (pct >= 95) return '<span class="badge badge-red">위험</span>';
+  if (pct >= 85) return '<span class="badge badge-yellow">주의</span>';
+  return '<span class="badge badge-green">정상</span>';
+}
+
+const tsTbody = document.getElementById('ts-tbody');
+tsData.forEach(([name, total, used, free, pct]) => {
+  const color = pctColor(pct);
+  tsTbody.innerHTML += `
+    <tr>
+      <td><strong>${name}</strong></td>
+      <td class="num">${total.toLocaleString()}</td>
+      <td class="num">${used.toLocaleString()}</td>
+      <td class="num">${free.toLocaleString()}</td>
+      <td>
+        <div class="pct-bar-wrap">
+          <div class="pct-bar"><div class="pct-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+          <span class="pct-num" style="color:${color}">${pct}%</span>
+        </div>
+      </td>
+      <td>${pctBadge(pct)}</td>
+    </tr>`;
+});
+
+/* ── Wait Events table ── */
+const waitData = [
+  ["resmgr:cpu quantum",         "Scheduler",   149530623.08],
+  ["cursor: mutex X",            "Concurrency",  42156753.41],
+  ["cursor: mutex S",            "Concurrency",   1416006.30],
+  ["acknowledge over PGA limit", "Scheduler",    1130836.01],
+  ["enq: TX - row lock contention","Application",  208203.36],
+  ["log file sync",              "Commit",          83021.72],
+  ["log file parallel write",    "System I/O",      80293.93],
+  ["buffer busy waits",          "Concurrency",     57169.86],
+  ["direct path write temp",     "User I/O",        43257.89],
+  ["cursor: pin S wait on X",    "Concurrency",     36695.99],
+];
+
+const waitColors = {
+  "Scheduler":"var(--red)","Concurrency":"var(--orange)",
+  "Application":"var(--yellow)","Commit":"var(--cyan)",
+  "System I/O":"var(--purple)","User I/O":"var(--accent)","Other":"var(--muted)"
+};
+const waitTbody = document.getElementById('wait-tbody');
+waitData.forEach(([evt, cls, tw], i) => {
+  const c = waitColors[cls] || 'var(--muted)';
+  waitTbody.innerHTML += `
+    <tr>
+      <td style="color:var(--muted)">${i+1}</td>
+      <td style="font-family:var(--mono);font-size:11px">${evt}</td>
+      <td><span class="badge" style="background:rgba(255,255,255,.05);border:1px solid var(--border);color:${c};font-size:10px">${cls}</span></td>
+      <td class="num" style="color:${c}">${tw.toLocaleString()}</td>
+    </tr>`;
+});
+
+/* ── Top SQL table ── */
+const sqlData = [
+  ["at4jm6164hznd", 59817.87, 275417, "SELECT /* DD_ACTIVITY_SAMPLING */ SYSDATE as now, sid, serial#, username, status, osuser..."],
+  ["9asn975gzs2uz",  49059.37,   8484, "UPDATE MSC_APP_COUPON_PRODUCT M SET ... [momstouch-api]"],
+  ["9asn975gzs2uz",  43160.60,   8830, "UPDATE MSC_APP_COUPON_PRODUCT M SET ... [momstouch-api]"],
+  ["9asn975gzs2uz",  21896.18,   7090, "UPDATE MSC_APP_COUPON_PRODUCT M SET ... [momstouch-api]"],
+  ["37m18wsy1cw8f",  15647.06,  42085, "SELECT /* DD_QM_FMS */ s.con_id, c.name pdb_name, force_matching_signature..."],
+  ["8cvg12waau9wn",  15091.56,     65, "BEGIN SYS.KUPW$WORKER.MAIN('SYS_EXPORT_FULL_01', 'SYS', 0, 0); END;"],
+  ["bh680f5h6d9np",  12521.35,    193, "BEGIN SYS.KUPM$MCP.MAIN('SYS_EXPORT_FULL_01', 'SYS', 0, 0, 0); END;"],
+  ["6szsbpnhsy385",  12324.71, 3223248,"SELECT NVL(SUM(T),0) AS totalPrice... [momstouch-api]"],
+  ["8qx03wt6y2q2h",   5349.27, 175889, "SELECT CUSTOMER_CD as customerCd... [momstouch-api]"],
+  ["6qg8qx4f0w962",   5047.49, 229941, "SELECT THPM.PROD_CD AS prodCd... [momstouch-api]"],
+];
+
+const sqlTbody = document.getElementById('sql-tbody');
+sqlData.forEach(([sid, el, ex, txt]) => {
+  const color = el > 30000 ? 'var(--red)' : el > 10000 ? 'var(--orange)' : 'var(--yellow)';
+  sqlTbody.innerHTML += `
+    <tr>
+      <td><span class="chip" style="color:var(--accent)">${sid}</span></td>
+      <td class="num" style="color:${color}">${el.toLocaleString()}</td>
+      <td class="num">${ex.toLocaleString()}</td>
+      <td style="font-size:11px;color:var(--muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${txt}">${txt}</td>
+    </tr>`;
+});
+</script>
+</body>
+</html>

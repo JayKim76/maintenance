@@ -5,3 +5,9 @@ python-dotenv
 websockets
 httpx
 python-multipart
+openai
+oracledb
+pytest
+pytest-asyncio
+pytest-httpx
+pytest-mock

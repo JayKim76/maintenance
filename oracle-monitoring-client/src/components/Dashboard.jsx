@@ -159,7 +159,7 @@ export default function Dashboard() {
                     </div>
 
                     <div className="mt-6 space-y-3">
-                        {(metrics.wait_events || []).slice(0, 3).map((item, idx) => (
+                        {(metrics.wait_events || []).slice(0, 4).map((item, idx) => (
                             <div key={idx} className="flex items-center justify-between text-sm">
                                 <div className="flex items-center gap-2">
                                     <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }}></span>
@@ -172,10 +172,63 @@ export default function Dashboard() {
                 </div>
             </div>
 
-            {/* Top SQL from Backend? Not yet in Dashboard.jsx, keeping Alerts placeholder */}
-            <div className="bg-surface rounded-xl border border-slate-700/50 p-6 shadow-lg shadow-black/20">
-                <h3 className="text-lg font-semibold text-gray-100 mb-4">Mock Critical Alerts</h3>
-                <div className="text-slate-400 text-sm">Alerts integration pending...</div>
+            {/* Tablespace & Top SQL Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Tablespace Usage Widget */}
+                <div className="bg-surface rounded-xl border border-slate-700/50 p-6 shadow-lg shadow-black/20">
+                    <h3 className="text-lg font-semibold text-gray-100 mb-4 flex items-center justify-between">
+                        <span className="flex items-center gap-2"><Database className="w-4 h-4 text-primary" /> 테이블스페이스 사용률 (Top 4)</span>
+                    </h3>
+                    {metrics.tablespaces && metrics.tablespaces.length > 0 ? (
+                        <div className="space-y-4">
+                            {metrics.tablespaces.map((ts, i) => {
+                                const pct = ts.max_used_pct || ts.used_pct || 0;
+                                const isHigh = pct >= 85;
+                                const isCrit = pct >= 95;
+                                return (
+                                    <div key={i} className="space-y-1">
+                                        <div className="flex justify-between text-xs font-semibold">
+                                            <span className="text-slate-200">{ts.name}</span>
+                                            <span className={isCrit ? 'text-danger' : isHigh ? 'text-amber-400' : 'text-slate-400'}>
+                                                {pct}% {ts.max_used_pct ? '(최대확장)' : ''}
+                                            </span>
+                                        </div>
+                                        <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                                            <div
+                                                className={`h-full transition-all duration-500 rounded-full ${isCrit ? 'bg-danger' : isHigh ? 'bg-amber-400' : 'bg-primary'}`}
+                                                style={{ width: `${Math.min(100, Math.max(2, pct))}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        <div className="text-slate-400 text-sm py-4 text-center">테이블스페이스 데이터 수집 중...</div>
+                    )}
+                </div>
+
+                {/* Top SQL Widget */}
+                <div className="bg-surface rounded-xl border border-slate-700/50 p-6 shadow-lg shadow-black/20">
+                    <h3 className="text-lg font-semibold text-gray-100 mb-4 flex items-center justify-between">
+                        <span className="flex items-center gap-2"><Activity className="w-4 h-4 text-accent" /> 최고 부하 SQL (Top 5)</span>
+                    </h3>
+                    {metrics.top_sql && metrics.top_sql.length > 0 ? (
+                        <div className="space-y-2">
+                            {metrics.top_sql.map((sql, i) => (
+                                <div key={i} className="flex items-center justify-between p-2 rounded bg-slate-800/40 text-xs border border-slate-700/30 hover:border-slate-600 transition-colors">
+                                    <div className="flex items-center gap-2 truncate max-w-[70%]">
+                                        <span className="font-mono text-primary font-bold">{sql.sql_id}</span>
+                                        <span className="text-slate-300 truncate font-mono">{sql.sql_text}</span>
+                                    </div>
+                                    <span className="font-mono text-amber-400 font-semibold">{sql.elapsed_s}s</span>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-slate-400 text-sm py-4 text-center">부하 SQL 데이터 수집 중...</div>
+                    )}
+                </div>
             </div>
         </div>
     );
